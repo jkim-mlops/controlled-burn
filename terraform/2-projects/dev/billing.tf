@@ -1,17 +1,15 @@
-data "google_project" "this" {}
-
 resource "google_billing_budget" "monthly" {
-  billing_account = data.google_project.this.billing_account
-  display_name    = "controlled-burn-dev monthly"
+  billing_account = google_project.this.billing_account
+  display_name    = "${var.project_id} monthly"
 
   budget_filter {
-    projects = ["projects/${data.google_project.this.number}"]
+    projects = ["projects/${google_project.this.number}"]
   }
 
   amount {
     specified_amount {
       currency_code = "USD"
-      units         = "50"
+      units         = var.budget_amount
     }
   }
 
@@ -24,6 +22,7 @@ resource "google_billing_budget" "monthly" {
   threshold_rules {
     threshold_percent = 1.0
   }
+  # Warns mid-month when the run rate is heading over budget.
   threshold_rules {
     threshold_percent = 1.0
     spend_basis       = "FORECASTED_SPEND"

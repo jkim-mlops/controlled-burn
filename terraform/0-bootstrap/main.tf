@@ -26,14 +26,23 @@ locals {
   # so tearing down an environment never removes the identity that manages it.
   stages = {
     "tf-org"          = { display_name = "Terraform org stage", state = "foundation" }
-    "tf-projects"     = { display_name = "Terraform projects stage", state = "foundation" }
+    "tf-projects-dev" = { display_name = "Terraform projects dev stage", state = "dev" }
     "tf-network-dev"  = { display_name = "Terraform network dev stage", state = "dev" }
     "tf-cluster-dev"  = { display_name = "Terraform cluster dev stage", state = "dev" }
     "tf-platform-dev" = { display_name = "Terraform platform dev stage", state = "dev" }
   }
 
+  # Terraform runs as service accounts that live here, so Google counts their
+  # API calls against the seed project: every API a stage calls must be enabled
+  # on the seed as well as on the project being built.
+  # Mirrors activate_apis on the seed project in terraform-example-foundation.
   seed_apis = [
+    "artifactregistry.googleapis.com",
+    "billingbudgets.googleapis.com",
+    "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "compute.googleapis.com",
+    "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "storage.googleapis.com",

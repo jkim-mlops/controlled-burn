@@ -1,19 +1,31 @@
 locals {
   # Roles each stage needs on the organization.
   org_roles = {
-    "tf-org"      = ["roles/resourcemanager.folderAdmin", "roles/orgpolicy.policyAdmin"]
-    "tf-projects" = ["roles/billing.user"]
+    # organizationAdmin is what lets 1-org manage org-level IAM in code; it is
+    # the most powerful role here, so only gcp-organization-admins@ may
+    # impersonate tf-org, and the account has no keys.
+    # Mirrors granular_sa_org_level_roles["org"] in terraform-example-foundation.
+    "tf-org" = [
+      "roles/resourcemanager.folderAdmin",
+      "roles/resourcemanager.organizationAdmin",
+      "roles/resourcemanager.organizationViewer",
+      "roles/orgpolicy.policyAdmin",
+    ]
+    "tf-projects-dev" = ["roles/billing.user"]
   }
 
-  # tf-projects creates and configures projects in every managed folder.
-  projects_stage_roles = [
-    "roles/resourcemanager.projectCreator",
-    "roles/resourcemanager.projectIamAdmin",
-    "roles/serviceusage.serviceUsageAdmin",
-  ]
-
-  # Environment-scoped stages are granted only on their own environment folder.
+  # Every environment-scoped stage is granted on its own environment folder
+  # only, so no credential can reach another environment. Adding staging or
+  # prod means another service account per stage, not a wider grant.
   stage_folder_roles = {
+    "tf-projects-dev" = {
+      folder = "dev"
+      roles = [
+        "roles/resourcemanager.projectCreator",
+        "roles/resourcemanager.projectIamAdmin",
+        "roles/serviceusage.serviceUsageAdmin",
+      ]
+    }
     "tf-network-dev" = {
       folder = "dev"
       roles = [
@@ -48,13 +60,6 @@ locals {
     }
   ]...)
 
-  projects_folder_bindings = merge([
-    for folder in local.managed_folders : {
-      for role in local.projects_stage_roles :
-      "tf-projects/${folder}/${role}" => { stage = "tf-projects", folder = folder, role = role }
-    }
-  ]...)
-
   stage_folder_bindings = merge([
     for stage, cfg in local.stage_folder_roles : {
       for role in cfg.roles :
@@ -78,14 +83,6 @@ resource "google_organization_iam_member" "stage" {
   member = google_service_account.stage[each.value.stage].member
 }
 
-resource "google_folder_iam_member" "projects_stage" {
-  for_each = local.projects_folder_bindings
-
-  folder = data.google_active_folder.folders[each.value.folder].name
-  role   = each.value.role
-  member = google_service_account.stage[each.value.stage].member
-}
-
 resource "google_folder_iam_member" "env_stage" {
   for_each = local.stage_folder_bindings
 
@@ -97,7 +94,7 @@ resource "google_folder_iam_member" "env_stage" {
 resource "google_billing_account_iam_member" "projects_stage_budgets" {
   billing_account_id = var.billing_account
   role               = "roles/billing.costsManager"
-  member             = google_service_account.stage["tf-projects"].member
+  member             = google_service_account.stage["tf-projects-dev"].member
 }
 
 resource "google_storage_bucket_iam_member" "stage_own_state" {
